@@ -50,6 +50,25 @@ def embed_file(file):
     return retriever
 
 
+# message를 화면에 보여주고, session_state에 저장하여 보관
+def send_message(message, role, save=True):
+    with st.chat_message(role):
+        st.markdown(message)
+    if save:
+        st.session_state["messages"].append({"message": message, "role": role})
+
+
+# session_state에 저장된 메시지를 화면에 보여줌, 저장은 비활성화
+# 저장을 하는 경우 중복 저장됨
+def paint_history():
+    for message in st.session_state["messages"]:
+        send_message(
+            message["message"],
+            message["role"],
+            save=False,
+        )
+
+
 st.title("DocumentGPT")
 
 st.markdown(
@@ -57,19 +76,29 @@ st.markdown(
 Welcome!
             
 Use this chatbot to ask questions to an AI about your files!
+
+Upload your file on the sidebar.
 """
 )
 
-file = st.file_uploader(
-    "Upload a .txt .pdf or .docx file",
-    type=[
-        "pdf",
-        "txt",
-        "docx",
-    ],
-)
+# 파일 입력 창을 사이드바로 이동
+with st.sidebar:
+    file = st.file_uploader(
+        "Upload a .txt .pdf or .docx file",
+        type=["pdf", "txt", "docx"],
+    )
 
+# 파일을 불러온 경우 임베딩하고, 임베딩이 완료되면 준비완료 메시지를 보냄
+# ai가 준비완료됐음을 나타내는 메시지는 저장할 필요 없음
 if file:
     retriever = embed_file(file)
-    s = retriever.invoke("describe victory mansion")
-    s  # st.write를 생략하고 변수명만 적어도 출력함
+    send_message("I'm ready! Ask away!", "ai", save=False)
+    # 화면에 저장된 메시지를 보여줌
+    paint_history()
+    # 사용자가 입력한 메시지를 보여주고 저장함
+    message = st.chat_input("Ask anything about your file...")
+    if message:
+        send_message(message, "human")
+else:
+    # 파일이 없거나 없어지는 경우 session_state를 초기화
+    st.session_state["messages"] = []
