@@ -7,15 +7,44 @@ from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_openai import ChatOpenAI
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
+from langchain.callbacks.base import BaseCallbackHandler
 import streamlit as st
+from sympy import true
 
 st.set_page_config(
     page_title="DocumentGPT",
     page_icon="📃",
 )
 
+
+# Streaming을 다루는 클래스 생성
+class ChatCallbackHandler(BaseCallbackHandler):
+    # 초기화 메소드: *arg는 argument(1,2,3,4), **kwarg는 keyword argument(a=1, b=2)
+    def __init__(self, *args, **kwargs):
+        self.message = ""
+
+    # llm시작
+    def on_llm_start(self, *args, **kwargs):
+        # message_box 초기화
+        self.message_box = st.empty()
+
+    # llm종료
+    def on_llm_end(self, *args, **kwargs):
+        # message를 저장
+        save_message(self.message, "ai")
+
+    def on_llm_new_token(self, token, *args, **kwargs):
+        # 기존 메시지에 계속 토큰을 붙여나감
+        self.message += token
+        # 추가되는 메시지를 메시지 박스에 마크다운으로 표시(업데이트)
+        self.message_box.markdown(self.message)
+
+
 llm = ChatOpenAI(
     temperature=0.1,
+    streaming=True,
+    # callbacks를 부를 때는 리스트로 제공
+    callbacks=[ChatCallbackHandler()],
 )
 
 
@@ -58,12 +87,17 @@ def embed_file(file):
     return retriever
 
 
+# 다른 곳에서 또 사용되므로 별도의 함수로 구성
+def save_message(message, role):
+    st.session_state["messages"].append({"message": message, "role": role})
+
+
 # message를 화면에 보여주고, session_state에 저장하여 보관
 def send_message(message, role, save=True):
     with st.chat_message(role):
         st.markdown(message)
     if save:
-        st.session_state["messages"].append({"message": message, "role": role})
+        save_message(message, role)
 
 
 # session_state에 저장된 메시지를 화면에 보여줌, 저장은 비활성화
@@ -140,9 +174,11 @@ if file:
             | prompt
             | llm
         )
-        response = chain.invoke(message)
-        # AI의 답변을 화면에 출력하고 저장
-        send_message(response.content, "ai")
+        # chain.invoke할 때 ChatCallbackHandler가 작동함
+        # AI로 하여금 박스를 생성하고 업데이트하게 하려면 chain.invoke를 st.chat_message 내부로 옮겨주기만 하면 됨
+        # ai chat_message에서 invoke가 발생하기 때문에 ai 메시지 내부에 message_box를 생성하게 됨
+        with st.chat_message("ai"):
+            response = chain.invoke(message)
 else:
     # 파일이 없거나 없어지는 경우 session_state를 초기화
     st.session_state["messages"] = []
