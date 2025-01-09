@@ -1,16 +1,21 @@
-import time
+from langchain.prompts import ChatPromptTemplate
 from langchain_community.document_loaders import UnstructuredFileLoader
 from langchain.storage import LocalFileStore
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import CacheBackedEmbeddings
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from pydantic import FilePath
+from langchain_openai import ChatOpenAI
+from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 import streamlit as st
 
 st.set_page_config(
     page_title="DocumentGPT",
     page_icon="📃",
+)
+
+llm = ChatOpenAI(
+    temperature=0.1,
 )
 
 
@@ -72,6 +77,27 @@ def paint_history():
         )
 
 
+# 임베딩된 docs는 여러 개의 Document를 가지고 있으므로 내용만 뽑아서 2줄씩 띄어 줌으로써 AI가 더 잘 구분할 수 있게 함
+def format_docs(docs):
+    return "\n\n".join(document.page_content for document in docs)
+
+
+# 프롬프트 작성
+prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """
+            Answer the question using ONLY the following context. If you don't know the answer just say you don't know. DON'T make anything up.
+
+            Context: {context}
+            """,
+        ),
+        ("human", "{question}"),
+    ]
+)
+
+
 st.title("DocumentGPT")
 
 st.markdown(
@@ -94,6 +120,7 @@ with st.sidebar:
 # 파일을 불러온 경우 임베딩하고, 임베딩이 완료되면 준비완료 메시지를 보냄
 # ai가 준비완료됐음을 나타내는 메시지는 저장할 필요 없음
 if file:
+    # embed_file 메소드를 통해 벡터화 된 문서들을 받음
     retriever = embed_file(file)
     send_message("I'm ready! Ask away!", "ai", save=False)
     # 화면에 저장된 메시지를 보여줌
@@ -102,6 +129,20 @@ if file:
     message = st.chat_input("Ask anything about your file...")
     if message:
         send_message(message, "human")
+        # 체인 생성
+        chain = (
+            {
+                # RunnableLamda는 함수를 실행할 수 있게 해줌
+                "context": retriever | RunnableLambda(format_docs),
+                # 질문을 통과시켜 전달함
+                "question": RunnablePassthrough(),
+            }
+            | prompt
+            | llm
+        )
+        response = chain.invoke(message)
+        # AI의 답변을 화면에 출력하고 저장
+        send_message(response.content, "ai")
 else:
     # 파일이 없거나 없어지는 경우 session_state를 초기화
     st.session_state["messages"] = []
