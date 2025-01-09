@@ -1,9 +1,10 @@
 import time
-from langchain.document_loaders import UnstructuredFileLoader
+from langchain_community.document_loaders import UnstructuredFileLoader
 from langchain.storage import LocalFileStore
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings, CacheBackedEmbeddings
-from langchain.vectorstores.faiss import FAISS
+from langchain.embeddings import CacheBackedEmbeddings
+from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
 from pydantic import FilePath
 import streamlit as st
 
@@ -14,6 +15,8 @@ st.set_page_config(
 
 
 # Embedding Method
+# st.cache_resource는 똑같은 파일이 들어오는 경우 embed_file method를 중복으로 처리하게 되어 효율성과 속도, 비용 모두 손해보기 때문에 재실행되는 것을 막아줌
+@st.cache_resource(show_spinner="Embedding file...")
 def embed_file(file):
     # file 읽기
     file_content = file.read()
