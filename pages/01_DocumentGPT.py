@@ -49,6 +49,7 @@ llm = ChatOpenAI(
 
 
 # Embedding Method
+# 함수 위에 추가하는 것을 데코레이터라고 함
 # st.cache_resource는 똑같은 파일이 들어오는 경우 embed_file method를 중복으로 처리하게 되어 효율성과 속도, 비용 모두 손해보기 때문에 재실행되는 것을 막아줌
 @st.cache_resource(show_spinner="Embedding file...")
 def embed_file(file):
@@ -79,7 +80,7 @@ def embed_file(file):
     cached_embeddings = CacheBackedEmbeddings.from_bytes_store(embeddings, cache_dir)
     # FAISS Vector Store를 이용하여 문서를 벡터로 저장
     vectorstore = FAISS.from_documents(docs, cached_embeddings)
-    # Vectorstore에 저장된 값을 Retriever로 변환
+    # Vectorstore에 저장된 값을 Retriever로 변환(리트리버로 변환해야 chain에서 사용 가능)
     retriever = vectorstore.as_retriever()
     # retriever에게 invoke하는 것은 문서에서 해당 내용을 검색하여 결과를 List of relavant docs로 반환
     # docs = retriever.invoke("ministry of truth")
@@ -177,8 +178,9 @@ if file:
         # chain.invoke할 때 ChatCallbackHandler가 작동함
         # AI로 하여금 박스를 생성하고 업데이트하게 하려면 chain.invoke를 st.chat_message 내부로 옮겨주기만 하면 됨
         # ai chat_message에서 invoke가 발생하기 때문에 ai 메시지 내부에 message_box를 생성하게 됨
+        # 즉, chat_message 블록 내에서 체인을 호출
         with st.chat_message("ai"):
-            response = chain.invoke(message)
+            chain.invoke(message)
 else:
     # 파일이 없거나 없어지는 경우 session_state를 초기화
     st.session_state["messages"] = []
