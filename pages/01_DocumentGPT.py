@@ -8,6 +8,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 from langchain.callbacks.base import BaseCallbackHandler
 import streamlit as st
+import os
 
 st.set_page_config(
     page_title="DocumentGPT",
@@ -56,13 +57,29 @@ def embed_file(file):
     # st.write(file_content)
     # file path 결정
     file_path = f"./.cache/files/{file.name}"
-    # st.write(file_path)
-    # file_path에 w(rite)b(inary) 모드로 열기
-    with open(file_path, "wb") as f:
-        # file 내용을 기록
-        f.write(file_content)
+    directory = os.path.dirname(file_path)
+
+    if not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+        print(f"Directory created: {directory}")
+
+    try:
+        # st.write(file_path)
+        # file_path에 w(rite)b(inary) 모드로 열기
+        with open(file_path, "wb") as f:
+            # file 내용을 기록
+            f.write(file_content)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
     # cache directory 설정: 로컬에 파일 저장
-    cache_dir = LocalFileStore(f"./.cache/embeddings/{file.name}")
+    cache_path = LocalFileStore(f"./.cache/embeddings/{file.name}")
+    cache_directory = os.path.dirname(cache_path)
+
+    if not os.path.exists(cache_directory):
+        os.makedirs(cache_directory, exist_ok=True)
+        print(f"Cache Directory created: {cache_directory}")
+
     splitter = CharacterTextSplitter.from_tiktoken_encoder(
         separator="\n",
         chunk_size=600,
@@ -75,7 +92,7 @@ def embed_file(file):
     # OpenAIEmbeddings 메소드 사용
     embeddings = OpenAIEmbeddings()
     # 캐시에 임베딩하여 이미 캐시되어 있는 경우 작업을 생략. 없으면 임베딩.
-    cached_embeddings = CacheBackedEmbeddings.from_bytes_store(embeddings, cache_dir)
+    cached_embeddings = CacheBackedEmbeddings.from_bytes_store(embeddings, cache_path)
     # FAISS Vector Store를 이용하여 문서를 벡터로 저장
     vectorstore = FAISS.from_documents(docs, cached_embeddings)
     # Vectorstore에 저장된 값을 Retriever로 변환(리트리버로 변환해야 chain에서 사용 가능)
