@@ -1,15 +1,13 @@
 from langchain.prompts import ChatPromptTemplate
-from langchain_community.document_loaders import UnstructuredFileLoader
+from langchain.document_loaders import UnstructuredFileLoader
 from langchain.storage import LocalFileStore
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import CacheBackedEmbeddings
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain_community.chat_models import ChatOllama
+from langchain.embeddings import CacheBackedEmbeddings, OllamaEmbeddings
+from langchain.vectorstores.faiss import FAISS
+from langchain.chat_models import ChatOllama
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 from langchain.callbacks.base import BaseCallbackHandler
 import streamlit as st
-from sympy import true
 
 st.set_page_config(
     page_title="PrivateGPT",
