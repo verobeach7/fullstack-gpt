@@ -73,8 +73,9 @@ def embed_file(file):
         print(f"An error occurred: {e}")
 
     # cache directory 설정: 로컬에 파일 저장
+    cache_basic_path = f"./.cache/embeddings/{file.name}"
+    cache_directory = os.path.dirname(cache_basic_path)
     cache_path = LocalFileStore(f"./.cache/embeddings/{file.name}")
-    cache_directory = os.path.dirname(cache_path)
 
     if not os.path.exists(cache_directory):
         os.makedirs(cache_directory, exist_ok=True)
