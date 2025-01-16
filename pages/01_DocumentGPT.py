@@ -9,7 +9,6 @@ from langchain_openai import ChatOpenAI
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 from langchain.callbacks.base import BaseCallbackHandler
 import streamlit as st
-from sympy import true
 
 st.set_page_config(
     page_title="DocumentGPT",
