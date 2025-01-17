@@ -7,6 +7,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.callbacks import StreamingStdOutCallbackHandler
 from langchain.schema import BaseOutputParser, output_parser
 import json
+import os
 
 
 class JsonOutputParser(BaseOutputParser):
@@ -46,7 +47,7 @@ questions_prompt = ChatPromptTemplate.from_messages(
             """
 You are a helpful assistant that is role playing as a teacher.
         
-Based ONLY on the following context make 10 questions to test the user's knowledge about the text.
+Based ONLY on the following context make 10 (TEN) questions minimum to test the user's knowledge about the text.
 
 Each question should have 4 answers, three of them must be incorrect and one should be correct.
         
@@ -79,6 +80,7 @@ questions_chain = {"context": format_docs} | questions_prompt | llm
 # json 형식으로 문제와 답을 formatting
 formatting_prompt = ChatPromptTemplate.from_messages(
     # {{}}를 이용한 이유는 {}만 사용 시 데이터를 입력 받는 것으로 판단하기 때문
+    # not a template variable임을 알리는 역할
     [
         (
             "system",
@@ -111,20 +113,20 @@ formatting_prompt = ChatPromptTemplate.from_messages(
                 "answers": [
                         {{
                             "answer": "Red",
-                            "correct": false
+                            "correct": False
                         }},
                         {{
                             "answer": "Yellow",
-                            "correct": false
+                            "correct": False
                         }},
                         {{
                             "answer": "Green",
-                            "correct": false
+                            "correct": False
                         }},
                         {{
                             "answer": "Blue",
-                            "correct": true
-                        }},
+                            "correct": True
+                        }}
                 ]
             }},
                         {{
@@ -132,20 +134,20 @@ formatting_prompt = ChatPromptTemplate.from_messages(
                 "answers": [
                         {{
                             "answer": "Baku",
-                            "correct": false
+                            "correct": False
                         }},
                         {{
                             "answer": "Tbilisi",
-                            "correct": true
+                            "correct": True
                         }},
                         {{
                             "answer": "Manila",
-                            "correct": false
+                            "correct": False
                         }},
                         {{
                             "answer": "Beirut",
-                            "correct": false
-                        }},
+                            "correct": False
+                        }}
                 ]
             }},
                         {{
@@ -153,20 +155,20 @@ formatting_prompt = ChatPromptTemplate.from_messages(
                 "answers": [
                         {{
                             "answer": "2007",
-                            "correct": false
+                            "correct": False
                         }},
                         {{
                             "answer": "2001",
-                            "correct": false
+                            "correct": False
                         }},
                         {{
                             "answer": "2009",
-                            "correct": true
+                            "correct": True
                         }},
                         {{
                             "answer": "1998",
-                            "correct": false
-                        }},
+                            "correct": False
+                        }}
                 ]
             }},
             {{
@@ -174,20 +176,20 @@ formatting_prompt = ChatPromptTemplate.from_messages(
                 "answers": [
                         {{
                             "answer": "A Roman Emperor",
-                            "correct": true
+                            "correct": True
                         }},
                         {{
                             "answer": "Painter",
-                            "correct": false
+                            "correct": False
                         }},
                         {{
                             "answer": "Actor",
-                            "correct": false
+                            "correct": False
                         }},
                         {{
                             "answer": "Model",
-                            "correct": false
-                        }},
+                            "correct": False
+                        }}
                 ]
             }}
         ]
@@ -207,6 +209,12 @@ formatting_chain = formatting_prompt | llm
 def split_file(file):
     file_content = file.read()
     file_path = f"./.cache/quiz_files/{file.name}"
+    directory = os.path.dirname(file_path)
+
+    if not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+        print(f"Directory created: {directory}")
+
     with open(file_path, "wb") as f:
         f.write(file_content)
     splitter = CharacterTextSplitter.from_tiktoken_encoder(
@@ -219,9 +227,26 @@ def split_file(file):
     return docs
 
 
+@st.cache_data(show_spinner="Making quiz...")
+# _docs: _를 이용하여 데이터 서명을 만드는데 사용하지 않도록 함
+# docs는 list로 변경 가능(Mutable)한 인자로 오류 발생.
+# topic이라는 추가 인자를 주어 캐싱을 위한 서명으로 사용하도록 함
+def run_quiz_chain(_docs, topic):
+    chain = {"context": questions_chain} | formatting_chain | output_parser
+    return chain.invoke(_docs)
+
+
+@st.cache_data(show_spinner="Searching Wikipedia...")
+def wiki_search(term):
+    retriever = WikipediaRetriever(top_k_results=5)
+    docs = retriever.get_relevant_documents(term)
+    return docs
+
+
 # 사이드바
 with st.sidebar:
     docs = None
+    topic = None
     # selectbox를 이용해 file/wikipedia article 중 선택
     choice = st.selectbox(
         "Choose what you want to use.",
@@ -243,17 +268,8 @@ with st.sidebar:
         # 사용자로부터 topic 받기
         topic = st.text_input("Search Wikipedia...")
         if topic:
-            # WikipediaRetriver 설정
-            # top_k_results: 몇 개의 문서를 가져올지 설정
-            retriever = WikipediaRetriever(top_k_results=5)
-            # 한국어 문서를 얻기를 원할 때 lang을 설정할 수 있음
-            # retriever = WikipediaRetriever(
-            #     top_k_results=5,
-            #     lang="ko",
-            # )
-            with st.status("Searching Wikipedia..."):
-                # topic 관련 문서 찾기
-                docs = retriever.get_relevant_documents(topic)
+            # wiki_search를 이용하여 caching
+            docs = wiki_search(topic)
 
 
 if not docs:
@@ -270,15 +286,5 @@ else:
 
     start = st.button("Generate Quiz")
     if start:
-        # questions_response = questions_chain.invoke(docs)
-        # st.write(questions_response.content)
-        # formatting_response = formatting_chain.invoke(
-        #     {"context": questions_response.content}
-        # )
-        # st.write(formatting_response.content)
-
-        # 위의 작업을 체인을 이용하여 간단하게 처리할 수 있음
-        chain = {"context": questions_chain} | formatting_chain | output_parser
-
-        response = chain.invoke(docs)
+        response = run_quiz_chain(docs, topic if topic else file.name)
         st.write(response)
