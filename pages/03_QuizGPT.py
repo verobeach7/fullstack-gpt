@@ -5,6 +5,17 @@ from langchain.retrievers import WikipediaRetriever
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.callbacks import StreamingStdOutCallbackHandler
+from langchain.schema import BaseOutputParser, output_parser
+import json
+
+
+class JsonOutputParser(BaseOutputParser):
+    def parse(self, text):
+        text = text.replace("```", "").replace("json", "")
+        return json.loads(text)
+
+
+output_parser = JsonOutputParser()
 
 
 st.set_page_config(
@@ -65,7 +76,7 @@ Context: {context}
 # invoke시 들어온 docs를 format_docs function을 이용해 string으로 변경
 questions_chain = {"context": format_docs} | questions_prompt | llm
 
-
+# json 형식으로 문제와 답을 formatting
 formatting_prompt = ChatPromptTemplate.from_messages(
     # {{}}를 이용한 이유는 {}만 사용 시 데이터를 입력 받는 것으로 판단하기 때문
     [
@@ -259,9 +270,15 @@ else:
 
     start = st.button("Generate Quiz")
     if start:
-        questions_response = questions_chain.invoke(docs)
-        st.write(questions_response.content)
-        formatting_response = formatting_chain.invoke(
-            {"context": questions_response.content}
-        )
-        st.write(formatting_response.content)
+        # questions_response = questions_chain.invoke(docs)
+        # st.write(questions_response.content)
+        # formatting_response = formatting_chain.invoke(
+        #     {"context": questions_response.content}
+        # )
+        # st.write(formatting_response.content)
+
+        # 위의 작업을 체인을 이용하여 간단하게 처리할 수 있음
+        chain = {"context": questions_chain} | formatting_chain | output_parser
+
+        response = chain.invoke(docs)
+        st.write(response)
