@@ -1,5 +1,7 @@
 from langchain.document_loaders import SitemapLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 import streamlit as st
+import requests
 
 # import requests
 
@@ -9,13 +11,42 @@ st.set_page_config(
 )
 
 
+# soup은 beautiful soup object임. 검색, 삭제 작업 등 수행 가능
+def parse_page(soup):
+    # document의 내용 커스터마이징
+    header = soup.find("header")
+    footer = soup.find("footer")
+    if header:
+        # .decompose는 하위 태그를 포함하여 모두 제거함
+        header.decompose()
+    if footer:
+        footer.decompose()
+    # 여기서 반환하는 값은 무엇이든지 page_content로써 document에 포함되게 됨
+    return (
+        str(soup.get_text())
+        .replace("\n", " ")
+        .replace("\xa0", " ")
+        .replace("CloseSearch Submit Blog", "")
+    )
+
+
 @st.cache_data(show_spinner="Loading website...")
 def load_website(url):
-    # SitemapLoader는 sitemap.xml에 들어있는 모든 페이지로부터 문서를 가져옴
-    loader = SitemapLoader(url)
-    # 초당 요청 수를 제한하여 차단 정책이나 속도 제한 정책 위반을 방지
-    loader.requests_per_second = 5
-    docs = loader.load()
+    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        chunk_size=1000,
+        chunk_overlap=200,
+    )
+    # URL 커스터마이징
+    loader = SitemapLoader(
+        url,
+        filter_urls=[
+            r"^(.*\/blog\/).*",
+        ],
+        # parsing_function property를 이용하여 파싱을 위한 함수를 작동시킬 수 있음
+        parsing_function=parse_page,
+    )
+    loader.requests_per_second = 2
+    docs = loader.load_and_split(text_splitter=splitter)
     return docs
 
 
@@ -47,6 +78,6 @@ if url:
         # response = requests.get(url)
         # print(response.text)
 
-        # url로부터 모든 페이지를 가져옴
+        # url로부터 페이지를 가져옴
         docs = load_website(url)
         st.write(docs)
