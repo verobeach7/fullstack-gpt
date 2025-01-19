@@ -1,5 +1,8 @@
 from langchain.document_loaders import SitemapLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+# BeautifulSoup 임포트
+from bs4 import BeautifulSoup
 import streamlit as st
 import requests
 
@@ -12,7 +15,8 @@ st.set_page_config(
 
 
 # soup은 beautiful soup object임. 검색, 삭제 작업 등 수행 가능
-def parse_page(soup):
+# BeautifulSoup을 임포트 후 명시적으로 soup에 지정해주면 자동완성도 사용 가능
+def parse_page(soup: BeautifulSoup):
     # document의 내용 커스터마이징
     header = soup.find("header")
     footer = soup.find("footer")
