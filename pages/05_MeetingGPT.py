@@ -1,10 +1,19 @@
 import streamlit as st
 import subprocess
 import math
-from pydub import AudioSegment
 import glob
-from openai import OpenAI
 import os
+from pydub import AudioSegment
+from openai import OpenAI
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.document_loaders import TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import StrOutputParser
+
+llm = ChatOpenAI(
+    temperature=0.1,
+)
 
 # kill switch: whisper모델 사용 비용이 비싸므로 이미 transcript가 마련되어 있다면 모든 과정을 pass 하도록 함
 has_transcript = os.path.exists("./.cache/podcast.txt")
@@ -90,7 +99,7 @@ with st.sidebar:
 
 if video:
     chunks_folder = "./.cache/chunks"
-    with st.status("Loading video..."):
+    with st.status("Loading video...") as status:
         # video file 읽어오기
         video_content = video.read()
         video_path = f"./.cache/{video.name}"
@@ -98,9 +107,68 @@ if video:
         transcript_path = video_path.replace("mp4", "txt")
         with open(video_path, "wb") as f:  # wb: write binary
             f.write(video_content)  # video file 쓰기
-    with st.status("Extracting audio..."):
+        status.update(label="Extracting audio...")
         extract_audio_from_video(video_path)
-    with st.status("Cutting audio segments..."):
+        status.update(label="Cutting audio segments...")
         cut_audio_in_chunks(audio_path, 10, chunks_folder)
-    with st.status("Transcribing audio..."):
+        status.update(label="Transcribing audio...")
         transcribe_chunks(chunks_folder, transcript_path)
+    transcript_tab, summary_tab, qa_tab = st.tabs(
+        [
+            "Transcript",
+            "Summary",
+            "Q&A",
+        ]
+    )
+    with transcript_tab:
+        # transcript_path는 위의 with block 내부에서 선언되었지만 밖에서도 사용 가능함
+        with open(transcript_path, "r") as file:
+            st.write(file.read())
+    with summary_tab:
+        start = st.button("Generate summary")
+        if start:
+            loader = TextLoader(transcript_path)
+            splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+                chunk_size=800,
+                chunk_overlap=100,
+            )
+            docs = loader.load_and_split(text_splitter=splitter)
+            first_summary_prompt = ChatPromptTemplate.from_template(
+                """
+                Write a concise summary of the following:
+                "{text}"
+                CONCISE SUMMARY:                
+            """
+            )
+            # StrOutputParser()를 이용하면 first_summary_chain을 invoke해서 받은 반환 데이터에 .content를 붙이지 않아도 됨
+            # 즉, .content를 사용해서 얻게되는 string을 알아서 parsing해줌
+            first_summary_chain = first_summary_prompt | llm | StrOutputParser()
+            summary = first_summary_chain.invoke(
+                {"text": docs[0].page_content},
+            )
+            refine_prompt = ChatPromptTemplate.from_template(
+                """
+                Your job is to produce a final summary.
+                We have provided an existing summary up to a certain point: {existing_summary}
+                We have the opportunity to refine the existing summary (only if needed) with some more context below.
+                ------------
+                {context}
+                ------------
+                Given the new context, refine the original summary.
+                If the context isn't useful, RETURN the original summary.
+                """
+            )
+            refine_chain = refine_prompt | llm | StrOutputParser()
+            with st.status("Summarizing...") as status:
+                # enumerate는 (0,seq[0]), (1,seq[1]), ... 을 가짐
+                # 이것을 사용함으로써 Refine되어지는 과정을 볼 수 있음
+                for i, doc in enumerate(docs[1:]):
+                    status.update(label=f"Processing document {i+1}/{len(docs)-1} ")
+                    summary = refine_chain.invoke(
+                        {
+                            "existing_summary": summary,
+                            "context": doc.page_content,
+                        }
+                    )
+                    st.write(summary)
+            st.write(summary)
