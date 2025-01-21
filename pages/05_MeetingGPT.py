@@ -3,6 +3,7 @@ import subprocess
 import math
 import glob
 import os
+from langchain.storage import LocalFileStore
 from pydub import AudioSegment
 from openai import OpenAI
 from langchain.chat_models import ChatOpenAI
@@ -10,6 +11,8 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import StrOutputParser
+from langchain.vectorstores.faiss import FAISS
+from langchain.embeddings import CacheBackedEmbeddings, OpenAIEmbeddings
 
 llm = ChatOpenAI(
     temperature=0.1,
@@ -17,6 +20,23 @@ llm = ChatOpenAI(
 
 # kill switch: whisper모델 사용 비용이 비싸므로 이미 transcript가 마련되어 있다면 모든 과정을 pass 하도록 함
 has_transcript = os.path.exists("./.cache/podcast.txt")
+
+splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+    chunk_size=800,
+    chunk_overlap=100,
+)
+
+
+@st.cache_resource()
+def embed_file(file_path):
+    cache_dir = LocalFileStore(f"./.cache/embeddings/{file.name}")
+    loader = TextLoader(file_path)
+    docs = loader.load_and_split(text_splitter=splitter)
+    embeddings = OpenAIEmbeddings()
+    cached_embeddings = CacheBackedEmbeddings.from_bytes_store(embeddings, cache_dir)
+    vectorstore = FAISS.from_documents(docs, cached_embeddings)
+    retriever = vectorstore.as_retriever()
+    return retriever
 
 
 @st.cache_data()
@@ -172,3 +192,7 @@ if video:
                     )
                     st.write(summary)
             st.write(summary)
+    with qa_tab:
+        retriever = embed_file(transcript_path)
+        docs = retriever.invoke("do they talk about marcus aurelius?")
+        st.write(docs)
