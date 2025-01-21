@@ -56,6 +56,7 @@ def get_answers(inputs):
     # List가 아닌 Dictionary가 반환되어야 함. 다음 체인(choose_answer function)의 입력 형식임.
     return {
         "question": question,
+        # List 내 Dictionary로 저장
         "answers": [
             {
                 "answer": answers_chain.invoke(
